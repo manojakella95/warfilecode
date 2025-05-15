@@ -32,24 +32,7 @@ jobs:
         --region $AWS_REGION > task-def.json
         cat task-def.json | jq '.taskDefinition' > task-def-body.json
 
-    - name: Clean and modify task definition
-      run: |
-        jq '{
-          family,
-          executionRoleArn,
-          networkMode,
-          containerDefinitions,
-          volumes,
-          placementConstraints,
-          requiresCompatibilities,
-          cpu,
-          memory,
-          runtimePlatform
-        }' task-def-body.json > cleaned-task-def.json
-
-        jq --arg IMAGE "$DOCKER_IMAGE_URI" \
-          '(.containerDefinitions[0].image) |= $IMAGE' cleaned-task-def.json > new-task-def.json
-
+    
     - name: Register new task definition revision
       id: register-task
       run: |
