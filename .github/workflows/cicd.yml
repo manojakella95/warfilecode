@@ -2,7 +2,7 @@ name: Deploy existing ECR image to ECS
 
 on:
   push:
-    branches: ["deployment-v1"]
+    branches: ["master"]
 
 env:
   AWS_REGION: eu-west-2
