@@ -26,18 +26,16 @@ jobs:
         aws-secret-access-key: Hcexq0EAxtPEMzdZXHELMmcnor7sKiLwH2jkfRBR
         aws-region: ap-south-1
 
-    - name: Fetch current task definition
+    - name: Get current task definition
       run: |
-        aws ecs describe-task-definition --task-definition $ECS_TASK_DEF > task-def.json
+        aws ecs describe-task-definition --task-definition $ECS_TASK_DEF \
+        --region $AWS_REGION > task-def.json
         cat task-def.json | jq '.taskDefinition' > task-def-body.json
 
-    - name: Register new task definition with updated image
-      id: register-task
+    - name: Clean and modify task definition
       run: |
-        # Extract only valid keys required for registering a task definition
-        jq '{ 
+        jq '{
           family,
-          taskRoleArn,
           executionRoleArn,
           networkMode,
           containerDefinitions,
@@ -45,25 +43,27 @@ jobs:
           placementConstraints,
           requiresCompatibilities,
           cpu,
-          memory
+          memory,
+          runtimePlatform
         }' task-def-body.json > cleaned-task-def.json
 
-        # Update image to the Docker Hub image
         jq --arg IMAGE "$DOCKER_IMAGE_URI" \
           '(.containerDefinitions[0].image) |= $IMAGE' cleaned-task-def.json > new-task-def.json
 
-        # Register the new task definition revision
-        TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-def.json | jq -r '.taskDefinition.taskDefinitionArn')
-
-        # Output the new task definition ARN for use in the next step
+    - name: Register new task definition revision
+      id: register-task
+      run: |
+        TASK_DEF_ARN=$(aws ecs register-task-definition \
+          --cli-input-json file://new-task-def.json \
+          --region $AWS_REGION | jq -r '.taskDefinition.taskDefinitionArn')
         echo "task_def_arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
         echo "Registered task definition: $TASK_DEF_ARN"
 
-    - name: Update ECS service to use new task definition
+    - name: Update ECS service to use new revision
       run: |
         aws ecs update-service \
           --cluster $ECS_CLUSTER \
           --service $ECS_SERVICE \
           --task-definition ${{ steps.register-task.outputs.task_def_arn }} \
-          --force-new-deployment
-
+          --force-new-deployment \
+          --region $AWS_REGION
